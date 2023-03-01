@@ -1,7 +1,8 @@
 const express = require('express')
 const bcrypt = require('bcrypt')
 const { initializeApp } = require('firebase/app')
-const { getFirestore, collection, getDoc, doc, setDoc, getDocs } = require('firebase/firestore')
+const { getFirestore, collection, getDoc, doc, setDoc, getDocs, deleteDoc, updateDoc} = require('firebase/firestore')
+const cors = require('cors')
 require("dotenv/config")
 
 //Base de datos
@@ -21,7 +22,13 @@ const firebaseConfig = {
   //Inicializar el servidor
   const app = express()
 
+  const corsOptions = {
+    "origin": "*",
+    "optionSuccessStatus": 200
+  }
+
   app.use(express.json())
+  app.use(cors(corsOptions))
 
   //Rutas para las peticiones EndPoint
   //Ruta registro
@@ -77,14 +84,111 @@ const firebaseConfig = {
     }
   })
 
-  app.get('/usuarios', (req, res) => {
-    const users = collection(db, 'users')
-    console.log('usuarios', users)
+  app.get('/usuarios', async(req, res) => {
+    const colRef = collection(db, 'users')
+    const docsSnap = await getDocs(colRef)
+    let data = []
+    docsSnap.forEach(doc => {
+    data.push(doc.data())
+    })
     res.json({
-      'alert': 'success',
-      users
+    message: "Usuarios",
+    'alert': 'success',
+    data
+  })
+})
+
+  app.post('/login', (req, res) => {
+    let {email, password} = req.body
+  
+    if(!email.length || !password.length){
+      return res.json({
+        'alert': 'No se han recibido datos correctamente'
+      })
+    }
+  
+    const users = collection(db, 'users')
+    getDoc(doc(users, email))
+    .then(user => {
+      if(!user.exists()){
+        return res.json({
+          'alert' : 'Correo no registrado'
+        })
+      } else {
+        bcrypt.compare(password, user.data().password, (error, result) => {
+          if(result) {
+            let data = user.data()
+            res.json({
+              'alert': 'Success',
+              name: data.name,
+              email: data.email
+            })
+          } else {
+            return res.json({
+              'alert': 'Password Incorrecto'
+            })
+          }
+        })
+      }
     })
   })
+
+  app.post('/delete', (req,res)=>{
+    
+    let {email} = req.body
+
+    deleteDoc(doc(collection(db, 'users'), email))
+    .then((response) =>{
+      res.json({
+        'alert': 'success'
+      })
+    })
+    .catch((error) => {
+      res.json({
+        'alert': error
+      })
+    })
+  })
+
+  app.post('/update', (req,res)=> {
+
+    const {email, name, lastname, number} = req.body
+
+    //Validaciones de los datos
+    if(name.length < 3) {
+      res.json({
+        'alert': 'nombre requiere minimo 3 caracters'
+      })
+    } else if (lastname.length <3){
+      res.json({
+        'alert': 'nombre requiere minimo 3 caracters'
+      })
+    } else if (!Number(number) || number.length < 10) {
+      res.json({
+        'alert': 'introduce un numero telefonico correcto'
+      })
+    } else {
+    const updateUser = collection(db, 'users')
+    const updateData = {
+      name,
+      lastname,
+      number
+    }
+    updateDoc(doc(updateUser, email), updateData, email)
+    .then((response) =>{
+      res.json({
+        'alert': 'success'
+      })
+    })
+    .catch((error) => {
+      res.json({
+        'alert': error
+      })
+    })
+  }
+})
+
+  
 
   const PORT = process.env.PORT || 19000
 
